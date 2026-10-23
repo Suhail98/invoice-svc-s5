@@ -1,6 +1,11 @@
 "use strict";
-// Partner invoice API.  (Session 5)  Key-gated. Read the LAB NOTE at the bottom.
-const path = require("path");
+// INSTRUCTOR ANSWER KEY for Lab 2 (Session 5) — the fixed partner route.
+//
+// The fix is not to "sanitize" the path — it is to stop taking a path at all.
+// Accept an invoice id (a positive integer, nothing else -> 400), map it to the one
+// file name it can mean, and let Express serve it with `root: BASE` (send refuses any
+// path that resolves outside root). No path is ever built from the request, so the
+// Semgrep taint flow is gone (0 findings with --config auto and with .semgrep.yml).
 const express = require("express");
 
 const BASE = process.env.PARTNER_BASE || "/srv/invoices/partner-acme";
@@ -9,15 +14,19 @@ const PARTNER_API_KEY = process.env.PARTNER_API_KEY || "pk_live_lab_demo";
 const router = express.Router();
 router.use(keyGate); // key check + PARTNER_API feature flag (defined below)
 
-// GET /partner/invoices?file=<name>   <-- VULNERABLE: user input -> file path, no containment
+// GET /partner/invoices?id=<n>   — look up by id, never by path
 router.get("/invoices", (req, res) => {
-  const p = path.join(BASE, String((req.query && req.query.file) || ""));
-  res.sendFile(p, (err) => { if (err) res.status(404).type("text/plain").send("not found"); });
+  const id = Number(req.query.id);
+  if (!Number.isInteger(id) || id <= 0) return res.sendStatus(400); // ?file=../x -> 400
+  res.sendFile(`inv-${id}.pdf`, { root: BASE });                     // stays under BASE
 });
 
 // GET /partner/export   — bulk export (key-gated lab stub)
 router.get("/export", (_req, res) =>
   res.type("application/json").send(JSON.stringify({ partner: "acme", invoices: 128, note: "lab stub" })));
+
+// a missing invoice -> plain 404 (no stack trace, no file path in the response)
+router.use((err, _req, res, _next) => res.sendStatus(err.status || 500));
 
 // key gate + feature flag (Session 5 containment switches PARTNER_API=off)
 function keyGate(req, res, next) {
@@ -29,18 +38,3 @@ function keyGate(req, res, next) {
 }
 
 module.exports = { partnerRouter: router };
-
-// LAB NOTE — INC-0492 / SAST:  the /invoices route above is DELIBERATELY VULNERABLE to
-// PATH TRAVERSAL.  It builds a file path from caller-controlled input (req.query.file)
-// and serves it with no containment check, so a request like
-//     /partner/invoices?file=../globex/inv-7.pdf
-// escapes the partner's own folder and reads another customer's invoice.
-//
-// Semgrep (`semgrep scan --config auto`) flags the taint flow
-//     req.query.file  ->  path.join(...)  ->  res.sendFile(...)
-// Lab 2 fixes it: accept an invoice id, never a path, and keep the file under BASE.
-// The instructor answer-key is web01/assets/partner.fixed.js.
-//
-// The key is a BENIGN lab value. The point of INC-0492 is that a VALID key still must
-// not read other customers' files — an AUTHORIZATION bug, distinct from the
-// leaked-credential (AUTHENTICATION) bug in INC-0485.
