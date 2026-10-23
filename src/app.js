@@ -8,6 +8,7 @@ const { partnerRouter } = require("./partner");
 // header/query key, with no cookies or sessions for a forged request to ride on.
 // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
 const app = express();
+const helmet = require('helmet'); app.use(helmet())
 app.use(express.json());
 
 // Home page. The release-builds link is how the team grabs old builds from web-01.
