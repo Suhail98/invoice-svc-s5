@@ -51,6 +51,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: semgrep scan --config auto --error src/
+  dast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run build
+      - name: Start the app
+        env:
+          APP_START: "1"
+          APP_VERSION: "ci"
+        run: |
+          node dist/app.js &
+          npx --yes wait-on -t 30000 http://localhost:3000/health
+      - name: ZAP baseline (DAST)
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: http://localhost:3000
+          rules_file_name: .zap/rules.tsv
+          fail_action: true
+          allow_issue_writing: false
+
   # CA-4 / CA-5 — build ONCE on a fresh runner, record a SHA-256, publish the artifact
   release:
     needs: [build-test, dependency-scan]
