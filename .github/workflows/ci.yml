@@ -35,7 +35,15 @@ jobs:
         run: >
           docker run --rm -e GITHUB_TOKEN -v "$PWD:/src" aquasec/trivy:0.76.0
           fs --scanners vuln --severity CRITICAL --exit-code 1 /src
-
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # full history
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # required to scan pull requests
   # CA-4 / CA-5 — build ONCE on a fresh runner, record a SHA-256, publish the artifact
   release:
     needs: [build-test, dependency-scan]
